@@ -13,6 +13,16 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 import tempfile
 import base64
+import shutil
+from pathlib import Path
+from datetime import datetime
+
+import os
+import logging
+from datetime import datetime
+import shutil
+from pathlib import Path
+from typing import Dict, Any, Optional
 
 # 导入日志模块
 from tradingagents.utils.logging_manager import get_logger
@@ -268,17 +278,17 @@ class ReportExporter:
 
             # 多头研究员分析
             if debate_state.get('bull_history'):
-                md_content += "### 📈 多头研究员分析\n\n"
+                md_content += "## 📈 多头研究员分析\n\n"
                 md_content += f"{self._clean_text_for_markdown(debate_state['bull_history'])}\n\n"
 
             # 空头研究员分析
             if debate_state.get('bear_history'):
-                md_content += "### 📉 空头研究员分析\n\n"
+                md_content += "## 📉 空头研究员分析\n\n"
                 md_content += f"{self._clean_text_for_markdown(debate_state['bear_history'])}\n\n"
 
             # 研究经理决策
             if debate_state.get('judge_decision'):
-                md_content += "### 🎯 研究经理综合决策\n\n"
+                md_content += "## 🎯 研究经理综合决策\n\n"
                 md_content += f"{self._clean_text_for_markdown(debate_state['judge_decision'])}\n\n"
 
         # III. 交易团队计划
@@ -296,22 +306,22 @@ class ReportExporter:
 
             # 激进分析师
             if risk_state.get('risky_history'):
-                md_content += "### 🚀 激进分析师评估\n\n"
+                md_content += "## 🚀 激进分析师评估\n\n"
                 md_content += f"{self._clean_text_for_markdown(risk_state['risky_history'])}\n\n"
 
             # 保守分析师
             if risk_state.get('safe_history'):
-                md_content += "### 🛡️ 保守分析师评估\n\n"
+                md_content += "## 🛡️ 保守分析师评估\n\n"
                 md_content += f"{self._clean_text_for_markdown(risk_state['safe_history'])}\n\n"
 
             # 中性分析师
             if risk_state.get('neutral_history'):
-                md_content += "### ⚖️ 中性分析师评估\n\n"
+                md_content += "## ⚖️ 中性分析师评估\n\n"
                 md_content += f"{self._clean_text_for_markdown(risk_state['neutral_history'])}\n\n"
 
             # 投资组合经理决策
             if risk_state.get('judge_decision'):
-                md_content += "### 🎯 投资组合经理最终决策\n\n"
+                md_content += "## 🎯 投资组合经理最终决策\n\n"
                 md_content += f"{self._clean_text_for_markdown(risk_state['judge_decision'])}\n\n"
 
         # V. 最终交易决策
@@ -629,9 +639,13 @@ def save_modular_reports_to_results_dir(results: Dict[str, Any], stock_symbol: s
     try:
         import os
         from pathlib import Path
-
         # 获取项目根目录
         current_file = Path(__file__)
+        
+        # 动态导入当前模块以获取_format_team_decision_content函数
+        import importlib
+        current_module = importlib.import_module(__name__)
+        _format_team_decision_content = current_module._format_team_decision_content
         project_root = current_file.parent.parent.parent
 
         # 获取results目录配置
@@ -719,7 +733,7 @@ def save_modular_reports_to_results_dir(results: Dict[str, Any], stock_symbol: s
                     report_content = f"# {module_info['title']}\n\n"
                     # 特殊处理团队决策报告的字典结构
                     if module_key in ['investment_debate_state', 'risk_debate_state']:
-                        report_content += self._format_team_decision_content(content, module_key)
+                        report_content += _format_team_decision_content(content, module_key)
                     else:
                         for sub_key, sub_value in content.items():
                             report_content += f"## {sub_key.replace('_', ' ').title()}\n\n{sub_value}\n\n"
@@ -818,6 +832,37 @@ def save_report_to_results_dir(content: bytes, filename: str, stock_symbol: str,
         logger.info(f"📁 项目根目录: {project_root}")
         logger.info(f"📁 Results目录: {results_dir}")
         logger.info(f"📁 环境变量TRADINGAGENTS_RESULTS_DIR: {results_dir_env}")
+
+        # 检查是否配置了额外的复制位置
+        extra_copy_path = os.getenv("TRADINGAGENTS_EXTRA_COPY_PATH")
+        if extra_copy_path and filename.endswith('.docx'):
+            try:
+                # 创建目标目录（如果不存在）
+                extra_path = Path(extra_copy_path)
+                extra_path.mkdir(parents=True, exist_ok=True)
+                
+                # 构造目标文件路径
+                destination_path = extra_path / new_filename
+                
+                # 复制文件
+                shutil.copy2(file_path, destination_path)
+                logger.info(f"✅ 报告已额外复制到: {destination_path}")
+            except Exception as copy_error:
+                logger.error(f"❌ 复制报告到额外位置失败: {copy_error}")
+
+        # 如果是docx文件，尝试复制非投资建议文件到指定目录
+        if filename.endswith('.docx'):
+            try:
+                # 导入并调用复制函数，只传递当前文件
+                from scripts.copy_non_investment_docx import copy_non_investment_docx_files
+                # 在单独线程中运行以避免阻塞主程序
+                import threading
+                thread = threading.Thread(target=copy_non_investment_docx_files, kwargs={'single_file': file_path})
+                thread.daemon = True
+                thread.start()
+                logger.info("🔄 已启动非投资建议docx文件复制任务")
+            except Exception as e:
+                logger.error(f"❌ 启动复制任务失败: {e}")
 
         return str(file_path)
 
