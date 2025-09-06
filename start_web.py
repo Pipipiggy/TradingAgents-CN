@@ -61,7 +61,7 @@ def main():
     cmd = [
         sys.executable, "-m", "streamlit", "run",
         str(app_file),
-        "--server.port", "8501",
+        "--server.port", "8502",
         "--server.address", "localhost",
         "--browser.gatherUsageStats", "false",
         "--server.fileWatcherType", "none",
@@ -69,7 +69,7 @@ def main():
     ]
     
     print("🌐 启动Web应用...")
-    print("📱 浏览器将自动打开 http://localhost:8501")
+    print("📱 浏览器将自动打开 http://localhost:8502")
     print("⏹️  按 Ctrl+C 停止应用")
     print("=" * 50)
     

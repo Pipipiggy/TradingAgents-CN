@@ -7,6 +7,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 import pandas as pd
 from datetime import datetime
+from typing import Dict, Any
 
 # 导入导出功能
 from utils.report_exporter import render_export_buttons
@@ -628,3 +629,82 @@ def create_sentiment_gauge(sentiment_score):
     ))
     
     return fig
+
+def auto_export_report(results: Dict[str, Any]):
+    """自动导出报告到指定目录"""
+    try:
+        from web.utils.report_exporter import save_modular_reports_to_results_dir, report_exporter, save_report_to_results_dir
+        import logging
+        from datetime import datetime
+        
+        logger = logging.getLogger(__name__)
+        
+        # 获取股票代码
+        stock_symbol = results.get('stock_symbol', 'analysis')
+        logger.info(f"🔄 开始自动导出报告: {stock_symbol}")
+        
+        # 记录报告导出器状态
+        logger.info("🔍 ReportExporter状态检查:")
+        logger.info(f"  - export_available: {report_exporter.export_available}")
+        logger.info(f"  - pandoc_available: {report_exporter.pandoc_available}")
+        logger.info(f"  - is_docker: {report_exporter.is_docker}")
+        
+        # 1. 保存分模块报告（CLI格式）
+        logger.info("📁 开始保存分模块报告（CLI格式）...")
+        modular_files = save_modular_reports_to_results_dir(results, stock_symbol)
+        logger.info(f"✅ 分模块报告保存完成，共保存 {len(modular_files) if modular_files else 0} 个文件")
+        
+        # 2. 生成并保存Markdown汇总报告
+        logger.info("📝 开始生成Markdown汇总报告...")
+        content = report_exporter.export_report(results, 'markdown')
+        if content:
+            logger.info(f"✅ Markdown内容生成成功，大小: {len(content)} 字节")
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            filename = f"{stock_symbol}_analysis_{timestamp}.md"
+            logger.info(f"📄 Markdown文件名: {filename}")
+            
+            # 保存汇总报告到results目录，传递results参数以启用投资建议前缀
+            logger.info("💾 开始保存Markdown汇总报告到results目录...")
+            saved_path = save_report_to_results_dir(content, filename, stock_symbol, results)
+            
+            if saved_path:
+                logger.info(f"✅ Markdown自动导出完成: {saved_path}")
+            else:
+                logger.error("❌ Markdown报告保存失败")
+        else:
+            logger.error("❌ Markdown导出失败，content为空")
+            
+        # 3. 生成并保存Word汇总报告（如果pandoc可用）
+        logger.info("Word导出检查:")
+        logger.info(f"  - pandoc_available: {report_exporter.pandoc_available}")
+        if report_exporter.pandoc_available:
+            logger.info("📄 开始生成Word汇总报告...")
+            docx_content = report_exporter.export_report(results, 'docx')
+            if docx_content:
+                logger.info(f"✅ Word内容生成成功，大小: {len(docx_content)} 字节")
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                filename = f"{stock_symbol}_analysis_{timestamp}.docx"
+                logger.info(f"📄 Word文件名: {filename}")
+                
+                # 保存Word汇总报告到results目录，传递results参数以启用投资建议前缀
+                logger.info("💾 开始保存Word汇总报告到results目录...")
+                saved_path = save_report_to_results_dir(docx_content, filename, stock_symbol, results)
+                
+                if saved_path:
+                    logger.info(f"✅ Word自动导出完成: {saved_path}")
+                else:
+                    logger.error("❌ Word报告保存失败")
+            else:
+                logger.error("❌ Word导出失败，content为空")
+                # 添加更多调试信息
+                logger.info("🔍 Word导出失败详细信息:")
+                logger.info(f"  - report_exporter.pandoc_available: {report_exporter.pandoc_available}")
+                logger.info(f"  - report_exporter.export_available: {report_exporter.export_available}")
+        else:
+            logger.info("ℹ️  Pandoc不可用，跳过Word自动导出")
+            
+    except Exception as e:
+        import traceback
+        logging.error(f"❌ 自动导出报告失败: {e}")
+        logging.error(f"❌ 详细错误: {traceback.format_exc()}")
+

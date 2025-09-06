@@ -790,6 +790,13 @@ def main():
 
                         # 标记分析完成并保存结果（不访问session state）
                         async_tracker.mark_completed("✅ 分析成功完成！", results=results)
+                        
+                        # 自动导出分析结果
+                        try:
+                            from web.components.results_display import auto_export_report
+                            auto_export_report(results)
+                        except Exception as export_error:
+                            logger.error(f"❌ 自动导出报告失败: {export_error}")
 
                         logger.info(f"✅ [分析完成] 股票分析成功完成: {analysis_id}")
 
@@ -1069,6 +1076,40 @@ def main():
         # 显示系统状态
         if st.session_state.last_analysis_time:
             st.info(f"🕒 上次分析时间: {st.session_state.last_analysis_time.strftime('%Y-%m-%d %H:%M:%S')}")
+
+def run_analysis():
+    """运行分析"""
+    try:
+        
+        if success:
+            # 显示结果
+            st.session_state.analysis_results = formatted_results
+            st.session_state.analysis_running = False
+            st.session_state.show_analysis_results = True
+            
+            # 自动导出报告
+            logging.info(f"\n✅开始自动导出分析结果")
+            auto_export_analysis_results(formatted_results)
+            logging.info(f"\n✅自动导出分析结果完成")
+            st.rerun()
+        else:
+            st.error(f"❌ 分析失败: {error_msg}")
+            st.session_state.analysis_running = False
+            st.rerun()
+            
+    except Exception as e:
+        handle_exception(e, "运行分析时")
+        st.session_state.analysis_running = False
+        st.rerun()
+
+def auto_export_analysis_results(results):
+    """自动导出分析结果"""
+    try:
+        from web.components.results_display import auto_export_report
+        auto_export_report(results)
+    except Exception as e:
+        import logging
+        logging.error(f"自动导出分析结果失败: {e}")
 
 if __name__ == "__main__":
     main()

@@ -47,8 +47,8 @@ class DataSourceManager:
 
     def _get_default_source(self) -> ChinaDataSource:
         """获取默认数据源"""
-        # 从环境变量获取，默认使用AKShare作为第一优先级数据源
-        env_source = os.getenv('DEFAULT_CHINA_DATA_SOURCE', 'akshare').lower()
+        # 从环境变量获取，默认使用Tushare作为第一优先级数据源
+        env_source = os.getenv('DEFAULT_CHINA_DATA_SOURCE', 'tushare').lower()
 
         # 映射到枚举
         source_mapping = {
@@ -58,7 +58,96 @@ class DataSourceManager:
             'tdx': ChinaDataSource.TDX
         }
 
-        return source_mapping.get(env_source, ChinaDataSource.AKSHARE)
+        return source_mapping.get(env_source, ChinaDataSource.TUSHARE)
+
+    def get_stock_data(self, symbol: str, start_date: str, end_date: str) -> str:
+        """
+        获取中国股票数据 - 统一入口，根据当前数据源选择具体实现
+
+        Args:
+            symbol: 股票代码
+            start_date: 开始日期
+            end_date: 结束日期
+
+        Returns:
+            str: 格式化的股票数据
+        """
+        # 记录详细的输入参数
+        logger.info(f"📊 [数据获取] 开始获取股票数据",
+                   extra={
+                       'symbol': symbol,
+                       'start_date': start_date,
+                       'end_date': end_date,
+                       'data_source': self.current_source.value,
+                       'event_type': 'data_fetch_start'
+                   })
+
+        # 添加详细的股票代码追踪日志
+        logger.info(f"🔍 [股票代码追踪] DataSourceManager.get_stock_data 接收到的股票代码: '{symbol}' (类型: {type(symbol)})")
+        logger.info(f"🔍 [股票代码追踪] 股票代码长度: {len(str(symbol))}")
+        logger.info(f"🔍 [股票代码追踪] 股票代码字符: {list(str(symbol))}")
+        logger.info(f"🔍 [股票代码追踪] 当前数据源: {self.current_source.value}")
+
+        start_time = time.time()
+
+        try:
+            # 根据数据源调用相应的获取方法
+            if self.current_source == ChinaDataSource.TUSHARE:
+                logger.info(f"🔍 [股票代码追踪] 调用 Tushare 数据源，传入参数: symbol='{symbol}'")
+                result = self._get_tushare_data(symbol, start_date, end_date)
+            elif self.current_source == ChinaDataSource.AKSHARE:
+                result = self._get_tushare_data(symbol, start_date, end_date)
+            elif self.current_source == ChinaDataSource.BAOSTOCK:
+                result = self._get_baostock_data(symbol, start_date, end_date)
+            elif self.current_source == ChinaDataSource.TDX:
+                result = self._get_tdx_data(symbol, start_date, end_date)
+            else:
+                result = f"❌ 不支持的数据源: {self.current_source.value}"
+
+            # 记录详细的输出结果
+            duration = time.time() - start_time
+            result_length = len(result) if result else 0
+            is_success = result and "❌" not in result and "错误" not in result
+
+            if is_success:
+                logger.info(f"✅ [数据获取] 成功获取股票数据",
+                           extra={
+                               'symbol': symbol,
+                               'start_date': start_date,
+                               'end_date': end_date,
+                               'data_source': self.current_source.value,
+                               'duration': round(duration, 2),
+                               'result_length': result_length,
+                               'event_type': 'data_fetch_success'
+                           })
+            else:
+                logger.error(f"❌ [数据获取] 获取股票数据失败",
+                            extra={
+                                'symbol': symbol,
+                                'start_date': start_date,
+                                'end_date': end_date,
+                                'data_source': self.current_source.value,
+                                'duration': round(duration, 2),
+                                'result_length': result_length,
+                                'event_type': 'data_fetch_failure'
+                            })
+
+            return result
+
+        except Exception as e:
+            duration = time.time() - start_time
+            logger.error(f"💥 [数据获取] 获取股票数据时发生未预期错误: {str(e)}",
+                        extra={
+                            'symbol': symbol,
+                            'start_date': start_date,
+                            'end_date': end_date,
+                            'data_source': self.current_source.value,
+                            'duration': round(duration, 2),
+                            'error_type': type(e).__name__,
+                            'error_message': str(e),
+                            'event_type': 'data_fetch_exception'
+                        })
+            return f"❌ 获取数据时发生错误: {str(e)}"
 
     # ==================== Tushare数据接口 ====================
 
@@ -293,104 +382,6 @@ class DataSourceManager:
         except ImportError as e:
             logger.error(f"❌ TDX适配器导入失败: {e}")
             return None
-    
-    def get_stock_data(self, symbol: str, start_date: str = None, end_date: str = None) -> str:
-        """
-        获取股票数据的统一接口
-
-        Args:
-            symbol: 股票代码
-            start_date: 开始日期
-            end_date: 结束日期
-
-        Returns:
-            str: 格式化的股票数据
-        """
-        # 记录详细的输入参数
-        logger.info(f"📊 [数据获取] 开始获取股票数据",
-                   extra={
-                       'symbol': symbol,
-                       'start_date': start_date,
-                       'end_date': end_date,
-                       'data_source': self.current_source.value,
-                       'event_type': 'data_fetch_start'
-                   })
-
-        # 添加详细的股票代码追踪日志
-        logger.info(f"🔍 [股票代码追踪] DataSourceManager.get_stock_data 接收到的股票代码: '{symbol}' (类型: {type(symbol)})")
-        logger.info(f"🔍 [股票代码追踪] 股票代码长度: {len(str(symbol))}")
-        logger.info(f"🔍 [股票代码追踪] 股票代码字符: {list(str(symbol))}")
-        logger.info(f"🔍 [股票代码追踪] 当前数据源: {self.current_source.value}")
-
-        start_time = time.time()
-
-        try:
-            # 根据数据源调用相应的获取方法
-            if self.current_source == ChinaDataSource.TUSHARE:
-                logger.info(f"🔍 [股票代码追踪] 调用 Tushare 数据源，传入参数: symbol='{symbol}'")
-                result = self._get_tushare_data(symbol, start_date, end_date)
-            elif self.current_source == ChinaDataSource.AKSHARE:
-                result = self._get_akshare_data(symbol, start_date, end_date)
-            elif self.current_source == ChinaDataSource.BAOSTOCK:
-                result = self._get_baostock_data(symbol, start_date, end_date)
-            elif self.current_source == ChinaDataSource.TDX:
-                result = self._get_tdx_data(symbol, start_date, end_date)
-            else:
-                result = f"❌ 不支持的数据源: {self.current_source.value}"
-
-            # 记录详细的输出结果
-            duration = time.time() - start_time
-            result_length = len(result) if result else 0
-            is_success = result and "❌" not in result and "错误" not in result
-
-            if is_success:
-                logger.info(f"✅ [数据获取] 成功获取股票数据",
-                           extra={
-                               'symbol': symbol,
-                               'start_date': start_date,
-                               'end_date': end_date,
-                               'data_source': self.current_source.value,
-                               'duration': duration,
-                               'result_length': result_length,
-                               'result_preview': result[:200] + '...' if result_length > 200 else result,
-                               'event_type': 'data_fetch_success'
-                           })
-                return result
-            else:
-                logger.warning(f"⚠️ [数据获取] 数据质量异常，尝试降级到其他数据源",
-                              extra={
-                                  'symbol': symbol,
-                                  'start_date': start_date,
-                                  'end_date': end_date,
-                                  'data_source': self.current_source.value,
-                                  'duration': duration,
-                                  'result_length': result_length,
-                                  'result_preview': result[:200] + '...' if result_length > 200 else result,
-                                  'event_type': 'data_fetch_warning'
-                              })
-
-                # 数据质量异常时也尝试降级到其他数据源
-                fallback_result = self._try_fallback_sources(symbol, start_date, end_date)
-                if fallback_result and "❌" not in fallback_result and "错误" not in fallback_result:
-                    logger.info(f"✅ [数据获取] 降级成功获取数据")
-                    return fallback_result
-                else:
-                    logger.error(f"❌ [数据获取] 所有数据源都无法获取有效数据")
-                    return result  # 返回原始结果（包含错误信息）
-
-        except Exception as e:
-            duration = time.time() - start_time
-            logger.error(f"❌ [数据获取] 异常失败: {e}",
-                        extra={
-                            'symbol': symbol,
-                            'start_date': start_date,
-                            'end_date': end_date,
-                            'data_source': self.current_source.value,
-                            'duration': duration,
-                            'error': str(e),
-                            'event_type': 'data_fetch_exception'
-                        }, exc_info=True)
-            return self._try_fallback_sources(symbol, start_date, end_date)
     
     def _get_tushare_data(self, symbol: str, start_date: str, end_date: str) -> str:
         """使用Tushare获取数据 - 直接调用适配器，避免循环调用"""

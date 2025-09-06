@@ -467,6 +467,74 @@ class TushareProvider:
             logger.error(f"❌ 获取{symbol}财务数据失败: {e}")
             return {}
     
+    def get_financial_indicators(self, symbol: str, period: str = None) -> pd.DataFrame:
+        """
+        获取财务指标数据
+        
+        Args:
+            symbol: 股票代码
+            period: 报告期（YYYYMMDD），如果为None则获取最新数据
+            
+        Returns:
+            DataFrame: 财务指标数据
+        """
+        if not self.connected:
+            return pd.DataFrame()
+        
+        try:
+            ts_code = self._normalize_symbol(symbol)
+            
+            # 获取财务指标数据
+            if period:
+                fina_data = self.api.fina_indicator(ts_code=ts_code, period=period)
+            else:
+                fina_data = self.api.fina_indicator(ts_code=ts_code)
+            
+            if fina_data is not None and not fina_data.empty:
+                # 只保留最新的数据记录
+                fina_data = fina_data.sort_values('end_date', ascending=False).head(1)
+                return fina_data
+            else:
+                return pd.DataFrame()
+                
+        except Exception as e:
+            logger.error(f"❌ 获取{symbol}财务指标数据失败: {e}")
+            return pd.DataFrame()
+    
+    def get_daily_basic(self, symbol: str, trade_date: str = None) -> pd.DataFrame:
+        """
+        获取每日指标数据（包含PE、PB等估值指标）
+        
+        Args:
+            symbol: 股票代码
+            trade_date: 交易日期（YYYYMMDD），如果为None则获取最新数据
+            
+        Returns:
+            DataFrame: 每日指标数据
+        """
+        if not self.connected:
+            return pd.DataFrame()
+        
+        try:
+            ts_code = self._normalize_symbol(symbol)
+            
+            # 获取每日指标数据
+            if trade_date:
+                daily_basic = self.api.daily_basic(ts_code=ts_code, trade_date=trade_date)
+            else:
+                daily_basic = self.api.daily_basic(ts_code=ts_code)
+            
+            if daily_basic is not None and not daily_basic.empty:
+                # 只保留最新的数据记录
+                daily_basic = daily_basic.sort_values('trade_date', ascending=False).head(1)
+                return daily_basic
+            else:
+                return pd.DataFrame()
+                
+        except Exception as e:
+            logger.error(f"❌ 获取{symbol}每日指标数据失败: {e}")
+            return pd.DataFrame()
+
     def _normalize_symbol(self, symbol: str) -> str:
         """
         标准化股票代码为Tushare格式

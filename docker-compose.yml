@@ -18,6 +18,8 @@ services:
       - ./logs:/app/logs
       # 配置目录映射 - 重要：持久化token统计和其他配置数据
       - ./config:/app/config
+      # 报告目录映射 - 保存分析报告到指定的宿主机目录
+      - /Users/liuqun/TradingAgents-CN/results:/app/results
     env_file:
       - .env
     environment:
@@ -31,6 +33,8 @@ services:
       TRADINGAGENTS_LOG_FILE: "/app/logs/tradingagents.log"
       TRADINGAGENTS_LOG_MAX_SIZE: "100MB"
       TRADINGAGENTS_LOG_BACKUP_COUNT: "5"
+      # 报告存储目录配置
+      TRADINGAGENTS_RESULTS_DIR: "/app/results"
       # Docker专用数据库配置（覆盖.env中的本地配置）
       TRADINGAGENTS_MONGODB_URL: mongodb://admin:tradingagents123@mongodb:27017/tradingagents?authSource=admin
       TRADINGAGENTS_REDIS_URL: redis://:tradingagents123@redis:6379
@@ -44,7 +48,7 @@ services:
       - redis
     networks:
       - tradingagents-network
-    # 健康检查
+    # 健志检查
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
       interval: 30s

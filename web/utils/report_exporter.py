@@ -575,17 +575,50 @@ class ReportExporter:
                 content = self.generate_pdf_report(results)
                 logger.info(f"✅ PDF文档生成成功，大小: {len(content)} 字节")
                 return content
-
-            else:
-                logger.error(f"❌ 不支持的导出格式: {format_type}")
-                st.error(f"❌ 不支持的导出格式: {format_type}")
-                return None
-
         except Exception as e:
-            logger.error(f"❌ 导出失败: {str(e)}", exc_info=True)
-            st.error(f"❌ 导出失败: {str(e)}")
+            logger.error(f"❌ 报告生成失败: {e}")
+            st.error(f"❌ 报告生成失败: {str(e)}")
             return None
+        # 如果没有匹配的格式或生成失败
+        return None
 
+    def _extract_investment_advice(self, results: Dict[str, Any]) -> str:
+        """从分析结果中提取投资建议并转换为文件名友好的格式"""
+        try:
+            # 获取投资建议
+            decision = results.get('decision', {})
+            if isinstance(decision, dict):
+                action = decision.get('action', '未知')
+            elif isinstance(decision, str):
+                action = decision
+            else:
+                action = '未知'
+            
+            # 将投资建议转换为文件名友好的格式
+            action_mapping = {
+                '买入': '买入',
+                '卖出': '卖出', 
+                '持有': '持有',
+                'BUY': '买入',
+                'SELL': '卖出',
+                'HOLD': '持有',
+                'buy': '买入',
+                'sell': '卖出',
+                'hold': '持有'
+            }
+            
+            # 获取标准化的投资建议
+            normalized_action = action_mapping.get(action, action)
+            
+            # 确保只返回中文建议，如果无法识别则返回"投资建议"
+            if normalized_action in ['买入', '卖出', '持有']:
+                return normalized_action
+            else:
+                return "投资建议"
+                
+        except Exception as e:
+            logger.error(f"❌ 提取投资建议失败: {e}")
+            return "投资建议"
 
 # 创建全局导出器实例
 report_exporter = ReportExporter()
@@ -735,7 +768,7 @@ def save_modular_reports_to_results_dir(results: Dict[str, Any], stock_symbol: s
         return {}
 
 
-def save_report_to_results_dir(content: bytes, filename: str, stock_symbol: str) -> str:
+def save_report_to_results_dir(content: bytes, filename: str, stock_symbol: str, results: Dict[str, Any] = None) -> str:
     """保存报告到results目录"""
     try:
         import os
@@ -762,8 +795,22 @@ def save_report_to_results_dir(content: bytes, filename: str, stock_symbol: str)
         stock_dir = results_dir / stock_symbol / analysis_date / "reports"
         stock_dir.mkdir(parents=True, exist_ok=True)
 
+        # 如果提供了results参数，尝试提取投资建议作为文件名前缀
+        if results:
+            # 创建报告导出器实例来提取投资建议
+            exporter = ReportExporter()
+            investment_advice = exporter._extract_investment_advice(results)
+            
+            # 分离文件名和扩展名
+            name_part, ext = os.path.splitext(filename)
+            
+            # 构造新的文件名，添加投资建议作为前缀
+            new_filename = f"{investment_advice}_{name_part}{ext}"
+        else:
+            new_filename = filename
+
         # 保存文件
-        file_path = stock_dir / filename
+        file_path = stock_dir / new_filename
         with open(file_path, 'wb') as f:
             f.write(content)
 
@@ -855,8 +902,8 @@ def render_export_buttons(results: Dict[str, Any]):
                 logger.info(f"✅ [EXPORT] Markdown导出成功，文件名: {filename}")
                 logger.info(f"✅ Markdown导出成功，文件名: {filename}")
 
-                # 3. 保存汇总报告到results目录
-                saved_path = save_report_to_results_dir(content, filename, stock_symbol)
+                # 3. 保存汇总报告到results目录，传递results参数以启用投资建议前缀
+                saved_path = save_report_to_results_dir(content, filename, stock_symbol, results)
 
                 # 4. 显示保存结果
                 if modular_files and saved_path:
@@ -900,8 +947,8 @@ def render_export_buttons(results: Dict[str, Any]):
                         logger.info(f"✅ [EXPORT] Word导出成功，文件名: {filename}, 大小: {len(content)} 字节")
                         logger.info(f"✅ Word导出成功，文件名: {filename}, 大小: {len(content)} 字节")
 
-                        # 3. 保存Word汇总报告到results目录
-                        saved_path = save_report_to_results_dir(content, filename, stock_symbol)
+                        # 3. 保存Word汇总报告到results目录，传递results参数以启用投资建议前缀
+                        saved_path = save_report_to_results_dir(content, filename, stock_symbol, results)
 
                         # 4. 显示保存结果
                         if modular_files and saved_path:
@@ -974,8 +1021,8 @@ def render_export_buttons(results: Dict[str, Any]):
                         filename = f"{stock_symbol}_analysis_{timestamp}.pdf"
                         logger.info(f"✅ PDF导出成功，文件名: {filename}, 大小: {len(content)} 字节")
 
-                        # 3. 保存PDF汇总报告到results目录
-                        saved_path = save_report_to_results_dir(content, filename, stock_symbol)
+                        # 3. 保存PDF汇总报告到results目录，传递results参数以启用投资建议前缀
+                        saved_path = save_report_to_results_dir(content, filename, stock_symbol, results)
 
                         # 4. 显示保存结果
                         if modular_files and saved_path:
